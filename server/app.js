@@ -2,12 +2,16 @@
 const express = require("express");
 const bodyParser = require("body-parser");
 const cors = require("cors");
+const connectDB = require("./Config/db.js"); // Import the MongoDB connection function
 const sessionMiddleware = require("./Middlewares/session");
 const employeeRoutes = require("./Routes/employeeRoutes");
 const attendanceRoutes = require("./Routes/attendanceRoutes");
 const sessionRoutes = require("./Routes/sessionRoutes");
 
 const app = express();
+
+// Connect to MongoDB
+connectDB();
 
 app.use(
   cors({

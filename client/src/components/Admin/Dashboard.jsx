@@ -173,7 +173,7 @@ const Attendance = () => {
                         Your Secret Code:
                       </span>
                       <strong className="text-gray-200">
-                        {employee.cnic_last6}
+                        {employee.cnicLast6}
                       </strong>
                     </p>
                   </div>

@@ -1,28 +1,24 @@
-const Attendance = require("../Models/AttendanceModel");
+const Attendance = require("../Models/AttendanceModel.js");
 
-const db = require("../Config/db.js");
+// const bcrypt = require("bcrypt");
 
-// Helper function to find the username by cnicLast6
-const findUsernameByCnicLast6 = (cnic_last6, callback) => {
-  const query = "SELECT * FROM employees WHERE cnic_last6 = ?";
-  db.query(query, [cnic_last6], (err, results) => {
-    if (err) return callback(err, null);
-    if (results.length === 0)
-      return callback(new Error("Employee not found"), null);
-    const username = results[0].username;
-    callback(null, username);
-  });
-};
+// Find or create user by CNIC last 6 digits
+// const findOrCreateUserByCnicLast6 = async (cnic_last6) => {
+//   // Check if the user already exists
+//   let user = await Employee.findOne({ cnic_last6 });
 
-// Create attendance record
-const recordAttendance = (req, res) => {
-  const { cnic_last6, location = {}, ipAddress = "Unknown" } = req.body;
+//   return user;
+// };
 
-  console.log("CNIC Last 6:", cnic_last6);
-  console.log("Request Body:", req.body);
-  console.log(location, ipAddress);
+const recordAttendance = async (req, res) => {
+  const {
+    cnic_last6,
+    username,
+    location = {},
+    ipAddress = "Unknown",
+    action,
+  } = req.body;
 
-  // Destructure the location object with default values
   const {
     city = "Unknown",
     country = "Unknown",
@@ -30,66 +26,143 @@ const recordAttendance = (req, res) => {
     longitude = "Unknown",
   } = location;
 
-  const currentDate = new Date().toISOString().split("T")[0];
-  const currentTime = new Date().toTimeString().split(" ")[0];
+  // Create a Date object for the current time in Pakistan Standard Time
+  const currentDateTime = new Date();
 
-  // Find username by cnic_last6
-  findUsernameByCnicLast6(cnic_last6, (err, username) => {
-    if (err) return res.status(500).json({ error: err.message });
+  // Define shift start time and grace period
+  const shiftStart = new Date(currentDateTime);
+  shiftStart.setHours(21, 0, 0, 0); // 9:00 PM
+  const gracePeriodEnd = new Date(shiftStart);
+  gracePeriodEnd.setMinutes(shiftStart.getMinutes() + 15); // 9:15 PM
 
-    // Check if attendance has already been recorded for today
-    Attendance.findByCnicAndDate(cnic_last6, currentDate, (err, results) => {
-      if (err) {
-        console.error("Error querying attendance:", err);
-        return res.status(500).json({ error: "Internal Server Error" });
-      }
+  // Format the current time in HH:mm:ss format
+  const formattedTime = currentDateTime.toLocaleTimeString("en-GB", {
+    hour12: true,
+  });
 
-      // If attendance is already recorded for today, respond with a message
-      if (results.length > 0) {
+  try {
+    // Prepare the attendance data object
+    const attendanceData = {
+      cnic_last6,
+      username,
+      location: {
+        city,
+        country,
+        latitude,
+        longitude,
+      },
+      ipAddress,
+      date: currentDateTime.toISOString().slice(0, 10), // Store date as YYYY-MM-DD
+      action,
+    };
+
+    if (action === "login") {
+      // Check if a login record already exists for today
+      const existingAttendance = await Attendance.findOne({
+        cnic_last6,
+        date: currentDateTime.toISOString().slice(0, 10), // Today's date in YYYY-MM-DD
+      });
+
+      if (existingAttendance && existingAttendance.loginTime) {
         return res.status(400).json({
-          message: "Attendance already recorded for today.",
-          date: currentDate,
+          message: "Login already recorded for today.",
         });
       }
 
-      // Prepare data for new attendance record
+      // Determine if the login is late
+      const isLate = currentDateTime > gracePeriodEnd;
+
+      // Prepare data for new or updated login record
       const attendanceData = {
         cnic_last6,
+        username,
         location: {
           city,
           country,
           latitude,
           longitude,
         },
-        ipAddress: ipAddress,
-        date: currentDate,
-        timestamp: currentTime,
-        username,
+        ipAddress,
+        loginTime: currentDateTime, // Store the actual Date object
+        date: currentDateTime.toISOString().slice(0, 10), // Store date as YYYY-MM-DD
+        isLate, // Boolean indicating if the user is late
+        action,
       };
 
-      console.log("Attendance Data:", attendanceData);
+      // Insert new login record if none exists or update the existing record
+      const newAttendance = existingAttendance
+        ? await Attendance.findByIdAndUpdate(
+            existingAttendance._id,
+            attendanceData,
+            { new: true }
+          )
+        : await Attendance.create(attendanceData);
 
-      // Insert new attendance record
-      Attendance.create(attendanceData, (err) => {
-        if (err) {
-          console.error("Error inserting attendance record:", err);
-          return res.status(500).json({ error: "Internal Server Error" });
-        }
-
-        console.log("Attendance Recorded:", attendanceData);
-
-        res.json({
-          message: "Attendance recorded",
-          data: attendanceData,
-          timestamp: currentTime,
-          date: currentDate,
-        });
+      res.json({
+        message: isLate
+          ? "Login recorded, but you are late."
+          : "Login recorded.",
+        data: {
+          ...newAttendance.toObject(),
+          formattedTime,
+        },
       });
-    });
-  });
+    } else if (action === "logout") {
+      // Find the login record to update with logout time
+      const attendanceRecord = await Attendance.findOne({
+        cnic_last6,
+        date: currentDateTime.toISOString().slice(0, 10), // Today's date in YYYY-MM-DD
+      });
+
+      if (!attendanceRecord) {
+        return res.status(400).json({
+          message: "No login record found for today. Please login first.",
+        });
+      }
+
+      if (attendanceRecord.logoutTime) {
+        return res.status(400).json({
+          message: "Logout already recorded for today.",
+        });
+      }
+
+      // Prepare data for updating logout time
+      const attendanceData = {
+        logoutTime: currentDateTime, // Store the actual Date object
+        action,
+      };
+
+      // Update the logout time in the existing record
+      const updatedAttendance = await Attendance.findByIdAndUpdate(
+        attendanceRecord._id,
+        {
+          $set: {
+            logoutTime: attendanceData.logoutTime, // Update only logoutTime
+            action: attendanceData.action, // Optional, you may not need this
+          },
+        },
+        { new: true }
+      );
+
+      res.json({
+        message: "Logout recorded.",
+        data: {
+          ...updatedAttendance.toObject(),
+          formattedTime,
+        },
+      });
+    } else {
+      return res.status(400).json({
+        message: "Invalid action. Must be 'login' or 'logout'.",
+      });
+    }
+  } catch (err) {
+    console.error("Error recording attendance:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
 };
 
-// Controller to check if attendance is recorded
+// Check Attendance
 const checkAttendance = async (req, res) => {
   const { date } = req.query;
   const { cnic_last6 } = req.user; // Assuming you're using some middleware to get the user
@@ -110,35 +183,50 @@ const checkAttendance = async (req, res) => {
   }
 };
 
-// Get all attendance records
-const getAllAttendanceRecords = (req, res) => {
-  Attendance.findAll((err, results) => {
-    if (err) return res.status(500).json({ error: "Internal Server Error" });
+// Get All Attendance Records
+const getAllAttendanceRecords = async (req, res) => {
+  try {
+    const results = await Attendance.find({})
+      .sort({ username: 1, date: -1, timestamp: -1 })
+      .exec();
 
     res.json(results);
-  });
+  } catch (err) {
+    console.error("Error fetching attendance records:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
 };
 
-// Get attendance records by username
-const getAttendanceByUsername = (req, res) => {
+// Get Attendance By Username
+const getAttendanceByUsername = async (req, res) => {
   const { username } = req.params;
 
-  Attendance.findByUsername(username, (err, results) => {
-    if (err) return res.status(500).json({ error: "Internal Server Error" });
+  try {
+    const results = await Attendance.find({ username })
+      .sort({ date: -1, timestamp: -1 })
+      .exec();
 
     res.json(results);
-  });
+  } catch (err) {
+    console.error("Error fetching attendance by username:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
 };
 
-// Get attendance records by cnicLast6
-const getAttendanceByCnicLast6 = (req, res) => {
+// Get Attendance By CNIC Last 6 Digits
+const getAttendanceByCnicLast6 = async (req, res) => {
   const { cnic_last6 } = req.params;
 
-  Attendance.findByCnicLast6(cnic_last6, (err, results) => {
-    if (err) return res.status(500).json({ error: "Internal Server Error" });
+  try {
+    const results = await Attendance.find({ cnic_last6 })
+      .sort({ date: -1, timestamp: -1 })
+      .exec();
 
     res.json(results);
-  });
+  } catch (err) {
+    console.error("Error fetching attendance by CNIC:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
 };
 
 module.exports = {

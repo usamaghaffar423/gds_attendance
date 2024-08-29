@@ -1,16 +1,15 @@
 // config/db.js
-const mysql = require("mysql2");
+const mongoose = require("mongoose");
 
-const db = mysql.createConnection({
-  host: process.env.HOST,
-  user: process.env.USER,
-  password: process.env.PASSWORD,
-  database: process.env.DATABASE,
-});
+const connectDB = async () => {
+  try {
+    const conn = await mongoose.connect(process.env.MONGO_URI);
 
-db.connect((err) => {
-  if (err) throw err;
-  console.log("MySQL Connected...");
-});
+    console.log(`MongoDB Connected: ${conn.connection.host}`);
+  } catch (err) {
+    console.error(`Error: ${err.message}`);
+    process.exit(1); // Exit process with failure
+  }
+};
 
-module.exports = db;
+module.exports = connectDB;

@@ -1,52 +1,41 @@
-const db = require("../Config/db");
+const mongoose = require("mongoose");
 
-const Attendance = {
-  // Check if attendance has been recorded for a specific employee on a specific date
-  findByCnicAndDate: (cnicLast6, date, callback) => {
-    const query = "SELECT * FROM attendance WHERE cnic_last6 = ? AND date = ?";
-    db.query(query, [cnicLast6, date], callback);
+const AttendanceSchema = new mongoose.Schema({
+  cnic_last6: {
+    type: String,
+    required: true,
   },
-
-  // Create a new attendance record
-  create: (attendanceData, callback) => {
-    const { cnic_last6, date, location, ipAddress, timestamp, username } =
-      attendanceData;
-    const query =
-      "INSERT INTO attendance (cnic_last6, date, location, ipAddress, timestamp, username) VALUES (?, ?, ?, ?, ?, ?)";
-    db.query(
-      query,
-      [
-        cnic_last6,
-        date,
-        JSON.stringify(location),
-        ipAddress,
-        timestamp,
-        username,
-      ], // Convert location to JSON string
-      callback
-    );
+  username: {
+    type: String,
+    required: true,
   },
-
-  // Retrieve all attendance records
-  findAll: (callback) => {
-    const query =
-      "SELECT * FROM attendance ORDER BY username, date DESC, timestamp DESC";
-    db.query(query, callback);
+  location: {
+    city: { type: String, default: "Unknown" },
+    country: { type: String, default: "Unknown" },
+    latitude: { type: String, default: "Unknown" },
+    longitude: { type: String, default: "Unknown" },
   },
-
-  // Retrieve attendance records for a specific username
-  findByUsername: (username, callback) => {
-    const query =
-      "SELECT * FROM attendance WHERE username = ? ORDER BY date DESC, timestamp DESC";
-    db.query(query, [username], callback);
+  ipAddress: {
+    type: String,
+    default: "Unknown",
   },
-
-  // Retrieve attendance records for a specific cnicLast6
-  findByCnicLast6: (cnic_last6, callback) => {
-    const query =
-      "SELECT * FROM attendance WHERE cnic_last6 = ? ORDER BY date DESC, timestamp DESC";
-    db.query(query, [cnic_last6], callback);
+  loginTime: {
+    type: Date,
+    default: Date.now, // Automatically set to current time
   },
-};
+  logoutTime: {
+    type: Date,
+    default: null, // Initially set to null
+  },
+  date: {
+    type: Date,
+    default: Date.now, // Store only the date part
+  },
+  action: {
+    type: String,
+    enum: ["login", "logout"],
+    required: true,
+  },
+});
 
-module.exports = Attendance;
+module.exports = mongoose.model("Attendance", AttendanceSchema);

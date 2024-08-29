@@ -3,6 +3,7 @@ import axios from "axios";
 import backgroundImage from "../assets/background-image.jpg";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import { Link } from "react-router-dom";
 
 const Home = () => {
   const [username, setUsername] = useState("");
@@ -56,6 +57,14 @@ const Home = () => {
       {/* Dark overlay */}
       <div className="absolute inset-0 bg-customDark opacity-95"></div>
 
+      <div className="flex justify-center mt-6 z-10 mb-8">
+        <Link to={"/employee-attendance"}>
+          <button className="bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg shadow-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition duration-300">
+            Go to Attendance
+          </button>
+        </Link>
+      </div>
+
       {/* Main content */}
       <div className="relative z-10 w-1/3 py-8 rounded-lg bg-slate-900 flex flex-col items-center gap-6">
         <div className="mb-2">
@@ -64,7 +73,7 @@ const Home = () => {
             placeholder="Username"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            className="py-2 px-4 rounded-lg text-lg bg-transparent border border-1 border-gray-400"
+            className="py-2 px-4 rounded-lg text-lg bg-transparent text-white border border-1 border-gray-400"
           />
         </div>
         <div className="mb-4">
@@ -73,7 +82,7 @@ const Home = () => {
             placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="py-2 px-4 rounded-lg text-lg bg-transparent border border-1 border-gray-400"
+            className="py-2 px-4 rounded-lg text-lg bg-transparent text-white border border-1 border-gray-400"
           />
         </div>
         <div className="w-1/3">

@@ -1,7 +1,8 @@
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
-const Session = require("../Models/SessionModel.js");
+const Employee = require("../Models/EmployeeModel.js"); // Ensure this model is set up with Mongoose
 
+// Start a new session (login)
 exports.startSession = async (req, res) => {
   const { username, password } = req.body;
 
@@ -14,7 +15,7 @@ exports.startSession = async (req, res) => {
 
   try {
     // Fetch user data by username
-    const user = await Session.findByUsername(username);
+    const user = await Employee.findOne({ username });
 
     // Check if user exists
     if (!user) {
@@ -29,17 +30,26 @@ exports.startSession = async (req, res) => {
       return res.status(401).json({ error: "Invalid username or password" });
     }
 
-    // Create session token (JWT)
+    // Create session token (JWT) if needed (not required for session management)
     const sessionToken = jwt.sign(
-      { userId: user.id, role: user.role },
+      { userId: user._id, role: user.role },
       process.env.WEB_SECRET,
       { expiresIn: "24h" }
     );
 
-    // Respond with user data and session token
+    // Store user data in the session
+    req.session.user = {
+      username: user.username,
+      role: user.role,
+      phoneNumber: user.phoneNumber,
+      designation: user.designation,
+      cnicLast6: user.cnicLast6,
+    };
+
+    // Respond with session token (if using JWT) or success message
     res.json({
-      user,
-      sessionToken,
+      user: req.session.user,
+      sessionToken, // Optionally include the JWT
     });
   } catch (error) {
     console.error("Error starting session:", error);
@@ -47,14 +57,20 @@ exports.startSession = async (req, res) => {
   }
 };
 
-// Controller function to handle sign-out
+// Handle sign-out
 exports.signOut = async (req, res) => {
-  // Assuming you're using sessions
-  await req.session.destroy((err) => {
-    if (err) {
-      return res.status(500).json({ message: "Failed to sign out" });
-    }
+  try {
+    // Assuming you are using session management with express-session
+    req.session.destroy((err) => {
+      if (err) {
+        console.error("Error destroying session:", err);
+        return res.status(500).json({ message: "Failed to sign out" });
+      }
 
-    res.status(200).json({ message: "Signed out successfully" });
-  });
+      res.status(200).json({ message: "Signed out successfully" });
+    });
+  } catch (error) {
+    console.error("Error during sign out:", error);
+    res.status(500).json({ message: "Failed to sign out" });
+  }
 };

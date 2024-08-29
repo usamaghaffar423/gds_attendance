@@ -1,5 +1,5 @@
 const bcrypt = require("bcrypt");
-const Employee = require("../Models/EmployeeModel");
+const Employee = require("../Models/EmployeeModel.js");
 
 // Hash password
 const hashPassword = async (password) => {
@@ -17,112 +17,141 @@ const registerEmployee = async (req, res) => {
 
   try {
     // Check if username already exists
-    Employee.findByUsername(username, async (err, results) => {
-      if (err) return res.status(500).json({ error: "Internal Server Error" });
-      if (results.length > 0)
-        return res.status(409).json({ error: "Username already exists" });
+    const existingUser = await Employee.findOne({ username });
+    if (existingUser) {
+      return res.status(409).json({ error: "Username already exists" });
+    }
+    // Check if username already exists
+    const userExisting = await Employee.findOne({ cnicLast6 });
+    if (userExisting) {
+      return res.status(409).json({ error: "Username already exists" });
+    }
 
-      // Hash password
-      const hashedPassword = await hashPassword(password);
+    // Hash password
+    const hashedPassword = await hashPassword(password);
 
-      // Create new employee
-      Employee.create(
-        {
-          username,
-          phoneNumber,
-          designation,
-          role,
-          cnicLast6,
-          password: hashedPassword,
-        },
-        (err) => {
-          if (err)
-            return res.status(500).json({ error: "Internal Server Error" });
-          res.status(201).json({ message: "Employee registered successfully" });
-        }
-      );
+    // Create new employee
+    const newEmployee = new Employee({
+      username,
+      phoneNumber,
+      designation,
+      role,
+      cnicLast6,
+      password: hashedPassword,
     });
+
+    await newEmployee.save();
+    res.status(201).json({ message: "Employee registered successfully" });
   } catch (err) {
+    console.error("Error registering employee:", err);
     res.status(500).json({ error: "Internal Server Error" });
   }
 };
 
 // Get all employees
-const getAllEmployees = (req, res) => {
-  Employee.findAll((err, results) => {
-    if (err) return res.status(500).json({ error: "Internal Server Error" });
-    res.json(results);
-  });
+const getAllEmployees = async (req, res) => {
+  try {
+    const employees = await Employee.find(); // Fetches all employees
+    res.json(employees);
+  } catch (err) {
+    console.error("Error fetching employees:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
 };
 
 // Get an employee by username
-const getEmployeeByUsername = (req, res) => {
+const getEmployeeByUsername = async (req, res) => {
   const { username } = req.params;
-  Employee.findByUsername(username, (err, results) => {
-    if (err) return res.status(500).json({ error: "Internal Server Error" });
-    if (results.length === 0)
+
+  try {
+    const employee = await Employee.findOne({ username });
+    if (!employee) {
       return res.status(404).json({ error: "Employee not found" });
-    res.json(results[0]);
-  });
+    }
+    res.json(employee);
+  } catch (err) {
+    console.error("Error fetching employee by username:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
 };
 
 // Get an employee by CNIC last 6 digits
-const getEmployeeByCnicLast6 = (req, res) => {
+const getEmployeeByCnicLast6 = async (req, res) => {
   const { cnicLast6 } = req.params;
-  Employee.findByCnicLast6(cnicLast6, (err, results) => {
-    if (err) return res.status(500).json({ error: "Internal Server Error" });
-    if (results.length === 0)
+
+  try {
+    const employee = await Employee.findOne({ cnicLast6 });
+    if (!employee) {
       return res.status(404).json({ error: "Employee not found" });
-    res.json(results[0]);
-  });
+    }
+    res.json(employee);
+  } catch (err) {
+    console.error("Error fetching employee by CNIC:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
 };
 
 // Update employee information by username
-const updateEmployeeByUsername = (req, res) => {
+const updateEmployeeByUsername = async (req, res) => {
   const { username } = req.params;
   const { phoneNumber, designation, role, cnicLast6, password } = req.body;
 
-  const updateData = { phoneNumber, designation, role, cnicLast6 };
+  try {
+    const updateData = { phoneNumber, designation, role, cnicLast6 };
 
-  if (password) {
-    // Hash new password if provided
-    hashPassword(password)
-      .then((hashedPassword) => {
-        updateData.password = hashedPassword;
+    if (password) {
+      // Hash new password if provided
+      const hashedPassword = await hashPassword(password);
+      updateData.password = hashedPassword;
+    }
 
-        Employee.update(updateData, (err) => {
-          if (err)
-            return res.status(500).json({ error: "Internal Server Error" });
-          res.json({ message: "Employee updated successfully" });
-        });
-      })
-      .catch((err) => {
-        res.status(500).json({ error: "Internal Server Error" });
-      });
-  } else {
-    Employee.update(updateData, (err) => {
-      if (err) return res.status(500).json({ error: "Internal Server Error" });
-      res.json({ message: "Employee updated successfully" });
-    });
+    const updatedEmployee = await Employee.findOneAndUpdate(
+      { username, cnicLast6 },
+      updateData,
+      { new: true } // Return the updated document
+    );
+
+    if (!updatedEmployee) {
+      return res.status(404).json({ error: "Employee not found" });
+    }
+
+    res.json({ message: "Employee updated successfully", updatedEmployee });
+  } catch (err) {
+    console.error("Error updating employee:", err);
+    res.status(500).json({ error: "Internal Server Error" });
   }
 };
 
 // Delete an employee by username
-const deleteEmployeeByUsername = (req, res) => {
+const deleteEmployeeByUsername = async (req, res) => {
   const { username } = req.params;
-  Employee.deleteByUsername(username, (err) => {
-    if (err) return res.status(500).json({ error: "Internal Server Error" });
+
+  try {
+    const result = await Employee.deleteOne({ username });
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ error: "Employee not found" });
+    }
     res.json({ message: "Employee deleted successfully" });
-  });
+  } catch (err) {
+    console.error("Error deleting employee by username:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
 };
 
 // Delete an employee by CNIC last 6 digits
-const deleteEmployeeByCnicLast6 = (req, res) => {
+const deleteEmployeeByCnicLast6 = async (req, res) => {
   const { cnicLast6 } = req.params;
-  Employee.deleteByCnicLast6(cnicLast6, (err) => {
-    if (err) return res.status(500).json({ error: "Internal Server Error" });
+
+  try {
+    const result = await Employee.deleteOne({ cnicLast6 });
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ error: "Employee not found" });
+    }
     res.json({ message: "Employee deleted successfully" });
-  });
+  } catch (err) {
+    console.error("Error deleting employee by CNIC:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
 };
 
 module.exports = {

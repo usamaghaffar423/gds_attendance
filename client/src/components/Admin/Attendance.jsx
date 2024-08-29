@@ -2,30 +2,31 @@ import React, { useState, useEffect } from "react";
 import axios from "axios";
 import logo from "../../assets/logo.png";
 import { NavLink } from "react-router-dom";
+import { format } from "date-fns";
 
-// Helper functions to format date and time
 const formatDate = (isoString) => {
-  const date = new Date(isoString);
-  const day = String(date.getDate()).padStart(2, "0");
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const year = date.getFullYear();
-  return `${day}/${month}/${year}`;
+  try {
+    const date = new Date(isoString);
+    if (isNaN(date.getTime())) throw new Error("Invalid Date");
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+  } catch (error) {
+    console.error("Error formatting date:", error);
+    return "Invalid Date";
+  }
 };
 
 const formatTime = (timestamp) => {
-  const [hours, minutes, seconds] = timestamp.split(":");
-  return `${hours}:${minutes}:${seconds}`;
-};
-
-// Function to get unique color for each date
-const getDateColor = (index) => {
-  const colors = [
-    "bg-indigo-950",
-    "bg-indigo-950",
-    "bg-purple-700",
-    "bg-red-700",
-  ];
-  return colors[index % colors.length];
+  try {
+    const date = new Date(timestamp);
+    if (isNaN(date.getTime())) throw new Error("Invalid Time");
+    return format(date, "hh:mm:ss a"); // Format: 06:01:00 PM
+  } catch (error) {
+    console.error("Error formatting time:", error);
+    return "N/A";
+  }
 };
 
 const Attendance = () => {
@@ -37,6 +38,7 @@ const Attendance = () => {
     axios
       .get("http://localhost:3002/api/all")
       .then((response) => {
+        console.log("API Response:", response.data);
         setAttendanceData(response.data);
         setLoading(false);
       })
@@ -47,22 +49,44 @@ const Attendance = () => {
       });
   }, []);
 
-  // Group records by date and sort by timestamp in descending order
+  function getDate() {
+    const today = new Date();
+    const month = today.getMonth() + 1;
+    const year = today.getFullYear();
+    const date = today.getDate();
+    return `${month}/${date}/${year}`;
+  }
+
+  console.log(getDate());
+
   const groupedAttendanceData = attendanceData.reduce((acc, record) => {
-    const date = formatDate(record.date);
-    if (!acc[date]) {
-      acc[date] = [];
+    const formattedDate = formatDate(record.date);
+    console.log(formattedDate);
+    const key = `${record.username}-${formattedDate}`;
+
+    if (!acc[key]) {
+      acc[key] = {
+        username: record.username,
+        cnic_last6: record.cnic_last6,
+        date: record.date,
+        loginTime: null,
+        logoutTime: null,
+      };
     }
-    acc[date].push(record);
+
+    if (record.action === "login") {
+      acc[key].loginTime = record.loginTime;
+      acc[key].logoutTime = record.logoutTime ? record.logoutTime : "N/A";
+    } else if (record.action === "logout") {
+      acc[key].loginTime = record.loginTime ? record.loginTime : "N/A";
+      acc[key].logoutTime = record.logoutTime;
+    }
     return acc;
   }, {});
 
-  // Sort the grouped attendance data by date in descending order
-  const sortedDates = Object.keys(groupedAttendanceData).sort((a, b) => {
-    const dateA = new Date(a.split("/").reverse().join("/"));
-    const dateB = new Date(b.split("/").reverse().join("/"));
-    return dateB - dateA; // Sort in descending order
-  });
+  const sortedGroupedData = Object.values(groupedAttendanceData).sort(
+    (a, b) => new Date(b.date) - new Date(a.date)
+  );
 
   return (
     <div className="flex h-screen bg-customBlueDarkHigh">
@@ -112,7 +136,7 @@ const Attendance = () => {
           <div className="p-4">Loading...</div>
         ) : error ? (
           <div className="p-4 text-red-500">Error: {error}</div>
-        ) : attendanceData.length > 0 ? (
+        ) : sortedGroupedData.length > 0 ? (
           <div className="min-w-full rounded-lg shadow-md bg-customBlueDark p-4 text-white">
             {/* Header Row */}
             <div className="flex text-gray-200 bg-slate-950 my-2 rounded-lg">
@@ -128,51 +152,41 @@ const Attendance = () => {
                 <h3 className="text-green-500 font-semibold">Date</h3>
               </div>
               <div className="py-3 px-4 flex-1 font-semibold">
-                <h3 className="text-green-500 font-semibold">Time</h3>
+                <h3 className="text-green-500 font-semibold">Login Time</h3>
+              </div>
+              <div className="py-3 px-4 flex-1 font-semibold">
+                <h3 className="text-green-500 font-semibold">Logout Time</h3>
               </div>
             </div>
 
             {/* Scrollable Body Rows */}
             <div className="scrollable-content max-h-[calc(100vh-200px)] overflow-y-auto scrollbar-custom">
-              {sortedDates.map((date, index) => (
-                <div key={date}>
-                  {/* Date Group Header */}
-                  <div
-                    className={`text-center text-white font-bold py-2 text-gray-300 ${getDateColor(
-                      index
-                    )}`}
-                  >
-                    Date: {date}
+              {sortedGroupedData.map((record, idx) => (
+                <div
+                  key={idx}
+                  className="flex min-w-full bg-customBlueDarkHigh rounded-lg hover:bg-slate-950 text-white my-2"
+                >
+                  <div className="py-3 px-4 flex-1">
+                    <p className="text-gray-400">{record.username}</p>
                   </div>
-
-                  {/* Sort the records for each date group by time in descending order */}
-                  {groupedAttendanceData[date]
-                    .sort(
-                      (a, b) => new Date(b.timestamp) - new Date(a.timestamp)
-                    )
-                    .map((record, idx) => (
-                      <div
-                        key={idx}
-                        className="flex min-w-full bg-customBlueDarkHigh rounded-lg hover:bg-slate-950 text-white my-2"
-                      >
-                        <div className="py-3 px-4 flex-1">
-                          <p className="text-gray-400">{record.username}</p>
-                        </div>
-                        <div className="py-3 px-4 flex-1">
-                          <p className="text-gray-400">{record.cnic_last6}</p>
-                        </div>
-                        <div className="py-3 px-4 flex-1">
-                          <p className="text-gray-400">
-                            {formatDate(record.date)}
-                          </p>
-                        </div>
-                        <div className="py-3 px-4 flex-1">
-                          <p className="text-gray-400">
-                            {formatTime(record.timestamp)}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
+                  <div className="py-3 px-4 flex-1">
+                    <p className="text-gray-400">{record.cnic_last6}</p>
+                  </div>
+                  <div className="py-3 px-4 flex-1">
+                    <p className="text-gray-400">{getDate(record.date)}</p>
+                  </div>
+                  <div className="py-3 px-4 flex-1">
+                    <p className="text-gray-400">
+                      {record.loginTime ? formatTime(record.loginTime) : "N/A"}
+                    </p>
+                  </div>
+                  <div className="py-3 px-4 flex-1">
+                    <p className="text-gray-400">
+                      {record.logoutTime
+                        ? formatTime(record.logoutTime)
+                        : "N/A"}
+                    </p>
+                  </div>
                 </div>
               ))}
             </div>
