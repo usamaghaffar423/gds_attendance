@@ -22,6 +22,10 @@ app.use(
 app.use(bodyParser.json());
 app.use(sessionMiddleware);
 
+app.get("/", (req, res) => {
+  res.send("Hello world");
+});
+
 // Routes
 app.use("/api", employeeRoutes);
 app.use("/api", attendanceRoutes);
