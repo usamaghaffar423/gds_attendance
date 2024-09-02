@@ -13,12 +13,7 @@ const app = express();
 // Connect to MongoDB
 connectDB();
 
-app.use(
-  cors({
-    origin: "http://localhost:3000", // Replace with your client-side URL
-    methods: ["GET", "POST"],
-  })
-);
+app.use(cors());
 app.use(bodyParser.json());
 app.use(sessionMiddleware);
 
